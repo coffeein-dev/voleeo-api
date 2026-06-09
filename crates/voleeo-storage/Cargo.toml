@@ -1,0 +1,21 @@
+[package]
+name = "voleeo-storage"
+version = "0.1.0"
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+
+[dependencies]
+voleeo-core = { path = "../voleeo-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_json_path = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+ulid = { workspace = true }
+serde_yaml = { workspace = true }
+chrono = { workspace = true }
+specta = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

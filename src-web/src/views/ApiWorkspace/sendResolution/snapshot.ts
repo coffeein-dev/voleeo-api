@@ -1,0 +1,93 @@
+import type { HttpRequest, RequestBody } from "@/store/requests"
+import type {
+  HeaderOrigin,
+  SentHeader,
+  SentRequestSnapshot,
+} from "../SentRequestInspector/types"
+import type { ResolvedSendPayload } from "./types"
+
+/** Readable rendering of a resolved body for the sent-request inspector. */
+function bodyDisplayText(body: RequestBody): string {
+  switch (body.kind) {
+    case "form_url_encoded":
+      return (body.fields ?? [])
+        .filter((f) => f.enabled && f.name.trim())
+        .map((f) => `${f.name}=${f.value}`)
+        .join("\n")
+    case "multipart":
+      return (body.fields ?? [])
+        .filter((f) => f.enabled && f.name.trim())
+        .map((f) => `${f.name}: ${f.isFile ? `@${f.value}` : f.value}`)
+        .join("\n")
+    case "binary":
+      return body.filePath ? `[binary] ${body.filePath}` : "[binary]"
+    default:
+      return body.text ?? ""
+  }
+}
+
+/** Read-only "what was sent" snapshot, from the same data `resolveSendPayload`
+ *  produced. Feeds the sent-request inspector and the Timing tab summary. */
+export function buildSentSnapshot(args: {
+  request: HttpRequest
+  payload: ResolvedSendPayload
+  /** `Date.now()` at send; `null` for a live preview. */
+  capturedAt: number | null
+}): SentRequestSnapshot {
+  const { request, payload, capturedAt } = args
+  const auth = payload.resolvedAuth
+
+  // `headerOrigins` is parallel to the merged headers by index; anything past it
+  // was appended by the auth step. Match by index — names can collide.
+  const headers: SentHeader[] = []
+  payload.headers.forEach((h, idx) => {
+    const ann = payload.headerOrigins[idx]
+    const origin: HeaderOrigin = !ann
+      ? { kind: "auth" }
+      : ann.origin === "folder"
+        ? { kind: "folder", folderName: ann.folderName ?? "" }
+        : ann.origin === "workspace"
+          ? { kind: "workspace" }
+          : { kind: "request" }
+    headers.push({ name: h.name, value: h.value, origin })
+  })
+
+  const authSummary = (() => {
+    switch (auth.kind) {
+      case "none":
+        return "No authentication"
+      case "bearer":
+        return "Bearer token"
+      case "basic":
+        return `Basic (${auth.username || "—"})`
+      case "api_key":
+        return `API key (${auth.key || "—"} in ${auth.location})`
+      case "inherit":
+        return "Inherited (no folder or workspace defined an auth)"
+    }
+  })()
+
+  return {
+    capturedAt,
+    method: request.method,
+    fullUrl: payload.fullUrl,
+    headers,
+    body: payload.body
+      ? { kind: payload.body.kind, text: bodyDisplayText(payload.body) }
+      : undefined,
+    cookies: (payload.cookies ?? []).map((c) => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path,
+    })),
+    resolvedAuth: {
+      kind: auth.kind,
+      summary: authSummary,
+      apiKeyLocation: auth.kind === "api_key" ? auth.location : undefined,
+      inheritedFromFolderId: payload.inheritedAuthFolderId,
+      inheritedFromFolderName: payload.inheritedAuthFolderName,
+      inheritedFromWorkspace: payload.inheritedAuthFromWorkspace,
+    },
+  }
+}

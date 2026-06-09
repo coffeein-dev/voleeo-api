@@ -1,0 +1,14 @@
+{
+  "name": "@voleeo/faker",
+  "displayName": "Faker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*",
+    "@faker-js/faker": "^10.4.0"
+  }
+}

@@ -1,0 +1,245 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tailwind utility aliases mapped to base16 slots. See CLAUDE.md "Theming
+ * (base16)" for the canonical slot ↔ utility table.
+ */
+@theme inline {
+  --color-bg: var(--base00);
+  --color-surface: var(--base01);
+  --color-subtle: var(--base02);
+  --color-fg: var(--base05);
+  --color-muted: var(--base04);
+  --color-border: var(--base02);
+  --color-accent: var(--base0D);
+  --color-success: var(--base0B);
+  --color-warn: var(--base0A);
+  --color-error: var(--base08);
+  --color-info: var(--base0C);
+  --color-syn-kw: var(--base0E);
+  --color-syn-str: var(--base0B);
+  --color-syn-num: var(--base09);
+  --color-syn-pun: var(--base05);
+  --color-syn-cmt: var(--base03);
+  --color-dnd-drop-line: var(--base0D);
+  --color-dnd-drop-into: var(--base02);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  /* shadcn semantic aliases mapped to base16 slots */
+  --color-background: var(--base00);
+  --color-foreground: var(--base05);
+  --color-card: var(--base01);
+  --color-card-foreground: var(--base05);
+  --color-popover: var(--base01);
+  --color-popover-foreground: var(--base05);
+  --color-primary: var(--base0D);
+  --color-primary-foreground: var(--base07);
+  --color-secondary: var(--base02);
+  --color-secondary-foreground: var(--base05);
+  --color-muted-foreground: var(--base04);
+  --color-destructive: var(--base08);
+  --color-input: var(--base02);
+  --color-ring: var(--base0D);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/*
+ * First-paint fallback before JS applies a theme. Matches the bundled "Dark"
+ * palette so reloads don't flash. `applyThemeToCss` overrides these at runtime.
+ */
+:root {
+  --base00: #08090a;
+  --base01: #16181b;
+  --base02: #232326;
+  --base03: #26272a;
+  --base04: #8a8f98;
+  --base05: #d7d8db;
+  --base06: #e5e6e8;
+  --base07: #f7f8f8;
+  --base08: #eb5757;
+  --base09: #f2994a;
+  --base0A: #f2c94c;
+  --base0B: #4cb782;
+  --base0C: #56ccf2;
+  --base0D: #5e6ad2;
+  --base0E: #bb8aee;
+  --base0F: #be5046;
+  --interface-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --interface-font-size: 14px;
+  --traffic-lights-width: 84px;
+  --topbar-height: 40px;
+  --radius: 0.375rem;
+  font-family: var(--interface-font);
+  font-size: var(--interface-font-size);
+  color: var(--base05);
+  background-color: var(--base00);
+}
+
+*,
+*::before,
+*::after {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Allow drag-selection inside contenteditable inputs.
+ * The global `*` rule sets user-select:none, which the browser respects even
+ * for contenteditable="false" chip spans inside a contenteditable parent —
+ * those spans are simply skipped during mouse-drag selection.  Overriding
+ * here with a higher-specificity selector makes chips selectable, so the user
+ * can drag-select text+chips together and then copy or delete the selection. */
+[contenteditable] [contenteditable="false"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Opt content back into selection on WebKit, where the global `-webkit-user-
+ * select:none` otherwise wins over Tailwind's unprefixed `select-text`. Used by
+ * the virtualized response viewer so its plain-DOM lines are selectable. */
+.selectable-text,
+.selectable-text * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@utility select-control {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 256 256'%3E%3Cpath fill='%23666' d='M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
+/* The Settings > Editor font picker drives CodeMirror surfaces only:
+ *   request body editor, response body, HTML response, SQL editor.
+ * Everything else (TemplateInput chips, UrlInput, badges) inherits from
+ * `--interface-font` so it tracks the Interface font instead. */
+:root {
+  --editor-font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --editor-font-size: 12px;
+}
+
+.cm-editor,
+.cm-editor .cm-content,
+.cm-editor .cm-line,
+.cm-editor .cm-gutter,
+.editor-text {
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+}
+
+/* `.editor-font` is the family-only opt-in for surfaces that want the editor
+ * typeface (the URL bar) but should still scale with the Interface font size
+ * picker rather than the editor size. */
+.editor-font {
+  font-family: var(--editor-font-family);
+}
+
+/* Placeholder for contenteditable elements */
+.ce-placeholder:empty::before {
+  content: attr(data-placeholder);
+  color: var(--base04);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* AG Grid overrides — `!important` is required to win over the themeQuartz
+ * inline styles. The rule is disabled for this file in biome.json. */
+
+/* Focused data cells get a subtle background fill rather than the default 1px
+ * outline; the row-number cell is excluded so its accent number stays the
+ * sole highlight. */
+.ag-cell.ag-cell-focus:not([col-id="__row_num"]) {
+  background-color: var(--base02) !important;
+}
+.ag-cell.ag-cell-focus,
+.ag-cell.ag-cell-focus::after,
+.ag-cell-focus:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: var(--base03) !important;
+}
+
+/* Row tint for the row containing the focused cell, distinct from the
+ * single focused cell which gets a brighter base02 fill above. */
+.ag-row.ag-row-focus:not(.ag-row-selected) {
+  background-color: var(--base01) !important;
+}
+
+/* Selection/focus backgrounds swallow per-cell column borders — re-assert
+ * the right border on every cell in those rows. */
+.ag-row-selected .ag-cell,
+.ag-row.ag-row-focus .ag-cell {
+  border-right: 1px solid var(--base03) !important;
+}
+
+/* Pending data-edit highlights. Tints are low-alpha so they read against any
+ * base16 background; the cellRenderer takes care of strikethroughs.
+ * Slot choices match the pending-changes badge (--base0A) and the delete /
+ * insert semantics (error / success). */
+.ag-cell.voleeo-cell-edit {
+  background-color: color-mix(
+    in srgb,
+    var(--base0A) 22%,
+    transparent
+  ) !important;
+}
+.ag-cell.voleeo-row-delete {
+  background-color: color-mix(
+    in srgb,
+    var(--base08) 18%,
+    transparent
+  ) !important;
+}
+.ag-cell.voleeo-row-insert {
+  background-color: color-mix(
+    in srgb,
+    var(--base0B) 14%,
+    transparent
+  ) !important;
+}
+/* Invalid pending value (length / NOT NULL violations caught client-side). */
+.ag-cell.voleeo-cell-invalid {
+  box-shadow: inset 0 0 0 1px var(--base08) !important;
+}

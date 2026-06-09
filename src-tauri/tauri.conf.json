@@ -1,0 +1,39 @@
+{
+  "productName": "Voleeo",
+  "version": "0.1.0",
+  "identifier": "com.voleeo.desktop",
+  "build": {
+    "beforeDevCommand": "cd src-web && bun run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "cd src-web && bun run build && cd .. && bun scripts/build-sidecar.mjs",
+    "frontendDist": "../src-web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Voleeo",
+        "width": 900,
+        "height": 680,
+        "minWidth": 900,
+        "minHeight": 680,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/voleeo-mcp-bridge"],
+    "icon": [
+      "icons/production/32x32.png",
+      "icons/production/128x128.png",
+      "icons/production/128x128@2x.png",
+      "icons/production/icon.icns",
+      "icons/production/icon.ico",
+      "icons/production/icon.png"
+    ]
+  }
+}

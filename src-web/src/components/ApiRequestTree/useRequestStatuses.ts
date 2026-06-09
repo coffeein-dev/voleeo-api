@@ -1,0 +1,129 @@
+import { listen } from "@tauri-apps/api/event"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useShallow } from "zustand/react/shallow"
+import { useHttpStore } from "@/store/http"
+import type { TreeNode } from "@/store/requests"
+import { commands } from "../../../../packages/types/bindings"
+
+function collectRequestIds(nodes: TreeNode[]): string[] {
+  const ids: string[] = []
+  for (const n of nodes) {
+    if (n.kind === "request") ids.push(n.request.id)
+    else if (n.kind === "folder") ids.push(...collectRequestIds(n.children))
+  }
+  return ids
+}
+
+/** Per-request last-response status code for the tree's status dots: persisted
+ * history merged with live in-session responses (live wins). Fetches only
+ * requests new to the tree, and patches single rows on `response:stored`. */
+export function useRequestStatuses(
+  workspaceId: string,
+  tree: TreeNode[],
+): Record<string, number> {
+  const [persistedStatuses, setPersistedStatuses] = useState<
+    Record<string, number>
+  >({})
+
+  // Tracks which (workspaceId, requestId) pairs have already been fetched so
+  // we only load statuses for requests that are new to the tree, not the whole
+  // list every time a rename or reorder changes the tree reference.
+  const statusFetchRef = useRef<{ wsId: string; ids: Set<string> }>({
+    wsId: "",
+    ids: new Set(),
+  })
+
+  // Load history status dots. Re-runs when the tree changes so newly created
+  // requests pick up their historical status without a full workspace reload.
+  useEffect(() => {
+    if (!workspaceId) return
+    let cancelled = false
+
+    // Full reset when the workspace changes.
+    if (statusFetchRef.current.wsId !== workspaceId) {
+      statusFetchRef.current = { wsId: workspaceId, ids: new Set() }
+      setPersistedStatuses({})
+    }
+
+    const ids = collectRequestIds(tree)
+    const missing = ids.filter((id) => !statusFetchRef.current.ids.has(id))
+    if (!missing.length) return
+    for (const id of missing) statusFetchRef.current.ids.add(id)
+
+    Promise.all(
+      missing.map((id) =>
+        commands
+          .responseList(workspaceId, id)
+          .then((res) =>
+            res.status === "ok" && res.data.length > 0
+              ? ([id, res.data[0].status] as const)
+              : null,
+          ),
+      ),
+    ).then((results) => {
+      if (cancelled) return
+      const next: Record<string, number> = {}
+      for (const r of results) if (r) next[r[0]] = r[1]
+      if (Object.keys(next).length > 0)
+        setPersistedStatuses((prev) => ({ ...prev, ...next }))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId, tree])
+
+  // Listen for newly stored responses and update just that request's status.
+  useEffect(() => {
+    if (!workspaceId) return
+    let unmounted = false
+    const handler = ({
+      payload,
+    }: {
+      payload: { workspaceId: string; requestId: string }
+    }) => {
+      if (unmounted || payload.workspaceId !== workspaceId) return
+      commands.responseList(workspaceId, payload.requestId).then((res) => {
+        if (unmounted || res.status !== "ok" || !res.data.length) return
+        setPersistedStatuses((prev) => ({
+          ...prev,
+          [payload.requestId]: res.data[0].status,
+        }))
+      })
+    }
+    let u1: (() => void) | null = null
+    let u2: (() => void) | null = null
+    listen<{ workspaceId: string; requestId: string }>(
+      "response:stored",
+      handler,
+    ).then((fn) => {
+      if (unmounted) fn()
+      else u1 = fn
+    })
+    listen<{ workspaceId: string; requestId: string }>(
+      "mcp:response:stored",
+      handler,
+    ).then((fn) => {
+      if (unmounted) fn()
+      else u2 = fn
+    })
+    return () => {
+      unmounted = true
+      u1?.()
+      u2?.()
+    }
+  }, [workspaceId])
+
+  // Merge with live in-session responses (live takes priority).
+  const liveStatuses = useHttpStore(
+    useShallow((s) => {
+      const out: Record<string, number> = {}
+      for (const [id, r] of Object.entries(s.responses)) out[id] = r.status
+      return out
+    }),
+  )
+  return useMemo(
+    () => ({ ...persistedStatuses, ...liveStatuses }),
+    [persistedStatuses, liveStatuses],
+  )
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@voleeo/base64",
+  "displayName": "Base64 Encode/Decode",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*"
+  }
+}

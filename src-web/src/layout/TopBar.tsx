@@ -1,0 +1,112 @@
+import { Glyph } from "@/components/Glyph"
+import { formatKeyCombo, SHORTCUTS } from "@/config/shortcuts"
+import { useKeydown } from "@/hooks/useKeydown"
+import { CookieJarSwitcher } from "@/layout/CookieJarSwitcher"
+import { EnvironmentSwitcher } from "@/layout/EnvironmentSwitcher"
+import { NewItemButton } from "@/layout/NewItemButton"
+import { PreferencesButton } from "@/layout/PreferencesButton"
+import { SourceControlMenu } from "@/layout/SourceControlMenu"
+import { WorkspaceSwitcher } from "@/layout/WorkspaceSwitcher"
+import { useEnvironmentStore } from "@/store/environment"
+import {
+  selectActiveConnection,
+  selectActiveFolder,
+  selectActiveRequest,
+  useRequestStore,
+} from "@/store/requests"
+import { useUiStore } from "@/store/workspace"
+
+const APP_NAME = "Voleeo"
+
+function SidebarToggleButton() {
+  const treeVisible = useUiStore((s) => s.treeVisible)
+  const toggleTreeVisible = useUiStore((s) => s.toggleTreeVisible)
+  useKeydown(SHORTCUTS.TOGGLE_TREE, toggleTreeVisible)
+  return (
+    <button
+      type="button"
+      title={`${treeVisible ? "Hide" : "Show"} sidebar (${formatKeyCombo(SHORTCUTS.TOGGLE_TREE)})`}
+      onClick={toggleTreeVisible}
+      className={`flex items-center justify-center w-7 h-7 rounded-[5px] cursor-pointer bg-transparent border-0 outline-none hover:bg-subtle ${treeVisible ? "" : "opacity-50"}`}
+    >
+      <Glyph kind="sidebar" size={14} color="var(--base04)" />
+    </button>
+  )
+}
+
+export function TopBar() {
+  const { activeTool, activeWorkspaceId, workspaces } = useUiStore()
+  const activeRequest = useRequestStore(selectActiveRequest)
+  const activeFolder = useRequestStore(selectActiveFolder)
+  const activeConnection = useRequestStore(selectActiveConnection)
+  const activeEnvColor = useEnvironmentStore((s) => {
+    const env = s.environments.find((e) => e.id === s.activeEnvId)
+    return env?.color ?? null
+  })
+
+  const activeWorkspace =
+    workspaces.find((w) => w.id === activeWorkspaceId) ?? null
+  const showSwitcher = activeTool !== "welcome" && activeWorkspace !== null
+
+  const activeApiItemName =
+    activeFolder?.name ?? activeConnection?.name ?? activeRequest?.name ?? null
+  const centerLabel =
+    activeTool === "git"
+      ? "Git Sync"
+      : activeTool === "api" && activeApiItemName
+        ? activeApiItemName
+        : APP_NAME
+
+  return (
+    <header
+      className="relative flex items-center bg-surface border-b border-border select-none"
+      style={{
+        height: "var(--topbar-height)",
+        paddingLeft: "var(--traffic-lights-width)",
+        paddingRight: 12,
+      }}
+      data-tauri-drag-region
+    >
+      {showSwitcher && activeEnvColor && (
+        <div
+          className="absolute bottom-0 right-0 w-1/3 h-px pointer-events-none"
+          style={{
+            background: `linear-gradient(to left, ${activeEnvColor}, transparent)`,
+          }}
+        />
+      )}
+      {/* Left — new item + workspace switcher */}
+      <div className="flex items-center gap-1 h-full">
+        {showSwitcher && (
+          <>
+            <SidebarToggleButton />
+            <NewItemButton />
+            <WorkspaceSwitcher
+              activeWorkspace={activeWorkspace}
+              activeWorkspaceId={activeWorkspace.id}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none">
+        <span className="font-sans text-[0.929rem] text-muted truncate max-w-[320px] block text-center">
+          {centerLabel}
+        </span>
+      </div>
+
+      <div className="flex-1" />
+
+      <div className="flex items-center gap-0.5">
+        {showSwitcher && activeTool === "api" && activeWorkspaceId && (
+          <>
+            <EnvironmentSwitcher workspaceId={activeWorkspaceId} />
+            <CookieJarSwitcher workspaceId={activeWorkspaceId} />
+          </>
+        )}
+        {showSwitcher && activeWorkspaceId && <SourceControlMenu />}
+        {activeTool !== "welcome" && <PreferencesButton />}
+      </div>
+    </header>
+  )
+}

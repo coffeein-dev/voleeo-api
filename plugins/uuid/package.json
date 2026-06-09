@@ -1,0 +1,17 @@
+{
+  "name": "@voleeo/uuid",
+  "displayName": "UUID Generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0"
+  }
+}

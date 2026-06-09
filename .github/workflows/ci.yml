@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10" # retry transient crates.io fetch failures
+  CARGO_HTTP_MULTIPLEXING: "false" # avoid macOS-runner curl 55 broken-pipe errors
+  # CI only lints and tests — it never bundles the app — so clear the Tauri
+  # sidecar resource check that would otherwise fail without a built bridge binary.
+  TAURI_CONFIG: '{"bundle":{"externalBin":[]}}'
+
+jobs:
+  check:
+    name: Lint & Test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          cache-on-failure: true
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate TS bindings
+        run: bun run codegen
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint (biome)
+        run: cd src-web && bun run lint
+
+      - name: Build frontend
+        run: cd src-web && bun run build
+
+      - name: Rust format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace
+
+      - name: Rust tests
+        run: cargo test --workspace

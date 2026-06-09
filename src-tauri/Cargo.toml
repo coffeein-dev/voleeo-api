@@ -1,0 +1,50 @@
+[package]
+name = "voleeo"
+version = "0.1.0"
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+default-run = "voleeo"
+
+[lib]
+name = "voleeo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "voleeo"
+path = "src/main.rs"
+
+[[bin]]
+name = "codegen"
+path = "src/bin/codegen.rs"
+
+[[bin]]
+name = "voleeo-mcp-bridge"
+path = "src/bin/voleeo_mcp_bridge.rs"
+
+[dependencies]
+voleeo-core = { path = "../crates/voleeo-core" }
+voleeo-cookies = { path = "../crates/voleeo-cookies" }
+voleeo-crypto = { path = "../crates/voleeo-crypto" }
+voleeo-http = { path = "../crates/voleeo-http" }
+voleeo-ws = { path = "../crates/voleeo-ws" }
+voleeo-git = { path = "../crates/voleeo-git" }
+voleeo-mcp = { path = "../crates/voleeo-mcp" }
+voleeo-storage = { path = "../crates/voleeo-storage" }
+voleeo-mac-window = { path = "../crates-tauri/voleeo-mac-window" }
+chrono = { workspace = true }
+keyring = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+tauri = { workspace = true }
+tauri-specta = { workspace = true }
+specta = { workspace = true }
+specta-typescript = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+font-kit = "0.14"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

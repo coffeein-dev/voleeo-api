@@ -1,0 +1,198 @@
+import type { Context } from "@voleeo/plugin-api"
+import type {
+  AuthConfig,
+  HttpRequest,
+  RequestParameter,
+} from "@voleeo/types/bindings"
+
+/** POSIX-safe single-quote. Same scheme as the cURL plugin. */
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
+}
+
+function extractPathParamNames(url: string): string[] {
+  let path = url
+  try {
+    path = new URL(url).pathname
+  } catch {
+    path = url.split("?")[0].split("#")[0]
+  }
+  return [...path.matchAll(/:([a-zA-Z_][a-zA-Z0-9_]*)/g)].map((m) => m[1])
+}
+
+function substitutePathParams(
+  url: string,
+  pathParams: Map<string, { value: string; enabled: boolean }>,
+): string {
+  return url.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_full, name: string) => {
+    const param = pathParams.get(name)
+    if (!param || !param.enabled) return ""
+    return encodeURIComponent(param.value)
+  })
+}
+
+function contentTypeFor(kind: string): string | null {
+  switch (kind) {
+    case "xml":
+      return "application/xml"
+    case "text":
+      return "text/plain"
+    default:
+      return null
+  }
+}
+
+async function resolveStr(ctx: Context, value: string): Promise<string> {
+  return ctx.templates.render(value)
+}
+
+async function resolveParams(
+  ctx: Context,
+  params: RequestParameter[],
+): Promise<Array<{ name: string; value: string; enabled: boolean }>> {
+  // Disabled rows skip template resolution entirely — matches Send behavior
+  // and avoids firing side-effecting templates (ask(), prompts) for rows the
+  // user has deliberately turned off.
+  return Promise.all(
+    params.map(async (p) =>
+      p.enabled
+        ? {
+            name: await resolveStr(ctx, p.name),
+            value: await resolveStr(ctx, p.value),
+            enabled: true,
+          }
+        : { name: p.name, value: p.value, enabled: false },
+    ),
+  )
+}
+
+async function buildAuthParts(
+  ctx: Context,
+  auth: AuthConfig | undefined,
+): Promise<{
+  flags: string[]
+  extraHeaders: Array<{ name: string; value: string }>
+  extraQuery: Array<{ name: string; value: string }>
+}> {
+  const flags: string[] = []
+  const extraHeaders: Array<{ name: string; value: string }> = []
+  const extraQuery: Array<{ name: string; value: string }> = []
+  if (!auth || auth.kind === "none") return { flags, extraHeaders, extraQuery }
+  if (auth.kind === "bearer") {
+    const token = await resolveStr(ctx, auth.token)
+    extraHeaders.push({ name: "Authorization", value: `Bearer ${token}` })
+  } else if (auth.kind === "basic") {
+    const user = await resolveStr(ctx, auth.username)
+    const pass = await resolveStr(ctx, auth.password)
+    flags.push(`-a ${shellQuote(`${user}:${pass}`)}`)
+  } else if (auth.kind === "api_key") {
+    const key = await resolveStr(ctx, auth.key)
+    const value = await resolveStr(ctx, auth.value)
+    if (auth.location === "header") extraHeaders.push({ name: key, value })
+    else extraQuery.push({ name: key, value })
+  }
+  return { flags, extraHeaders, extraQuery }
+}
+
+/** Encode a JSON value as the HTTPie raw-JSON token suffix (`:=`).
+ *  Numbers/booleans/null/arrays/objects need `:=`; strings use `=`. */
+function isFlatScalarObject(parsed: unknown): parsed is Record<string, unknown> {
+  return (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    !Array.isArray(parsed) &&
+    Object.values(parsed).every(
+      (v) => v === null || typeof v !== "object" || Array.isArray(v),
+    )
+  )
+}
+
+/** Serialize an HttpRequest as a runnable HTTPie command using native syntax:
+ *  `Name:value` for headers, `name==value` for query params, `field=value` for
+ *  string body fields, `field:=<json>` for non-string body fields. */
+export async function serializeAsHttpie(
+  request: HttpRequest,
+  ctx: Context,
+): Promise<string> {
+  const pathNames = new Set(extractPathParamNames(request.url))
+  const allParams = await resolveParams(ctx, request.parameters ?? [])
+  const pathParamMap = new Map<string, { value: string; enabled: boolean }>()
+  const queryParams: Array<{ name: string; value: string; enabled: boolean }> =
+    []
+  for (const p of allParams) {
+    if (pathNames.has(p.name))
+      pathParamMap.set(p.name, { value: p.value, enabled: p.enabled })
+    else queryParams.push(p)
+  }
+
+  let url = await resolveStr(ctx, request.url)
+  url = substitutePathParams(url, pathParamMap)
+
+  const auth = await buildAuthParts(ctx, request.auth)
+
+  // HTTPie wants query params as positional `name==value` args, NOT appended
+  // to the URL — keep the URL clean here.
+  const queryArgs: string[] = []
+  for (const q of queryParams) {
+    if (!q.enabled || !q.name) continue
+    queryArgs.push(shellQuote(`${q.name}==${q.value}`))
+  }
+  for (const q of auth.extraQuery) {
+    queryArgs.push(shellQuote(`${q.name}==${q.value}`))
+  }
+
+  // Headers as `Name:value` positional args.
+  const headerRows = await resolveParams(ctx, request.headers ?? [])
+  const headerArgs: string[] = []
+  const headerLower = new Set<string>()
+  for (const h of headerRows) {
+    if (!h.enabled || !h.name) continue
+    headerArgs.push(shellQuote(`${h.name}:${h.value}`))
+    headerLower.add(h.name.toLowerCase())
+  }
+  for (const h of auth.extraHeaders) {
+    headerArgs.push(shellQuote(`${h.name}:${h.value}`))
+    headerLower.add(h.name.toLowerCase())
+  }
+
+  // Body: JSON flat objects → `field=value` / `field:=<json>` tokens (most
+  // idiomatic). Anything else → --raw '<text>'.
+  const bodyArgs: string[] = []
+  if (request.body && request.body.kind !== "none" && request.body.text) {
+    const rawBody = await resolveStr(ctx, request.body.text)
+    if (request.body.kind === "json") {
+      let used = false
+      try {
+        const parsed = JSON.parse(rawBody)
+        if (isFlatScalarObject(parsed)) {
+          for (const [k, v] of Object.entries(parsed)) {
+            if (typeof v === "string") bodyArgs.push(shellQuote(`${k}=${v}`))
+            else bodyArgs.push(shellQuote(`${k}:=${JSON.stringify(v)}`))
+          }
+          used = true
+        }
+      } catch {
+        // fall through to --raw
+      }
+      if (!used) {
+        bodyArgs.push(`--raw ${shellQuote(rawBody)}`)
+      }
+    } else {
+      // xml/text: HTTPie defaults to JSON content-type unless we override.
+      const ct = contentTypeFor(request.body.kind)
+      if (ct && !headerLower.has("content-type")) {
+        headerArgs.push(shellQuote(`Content-Type:${ct}`))
+      }
+      bodyArgs.push(`--raw ${shellQuote(rawBody)}`)
+    }
+  }
+
+  const method = (request.method ?? "GET").toUpperCase()
+  // Head stays on the first line: `http [-a 'u:p'] METHOD 'url'`. Everything
+  // positional (queries/headers/body) goes on continuation lines.
+  const headSegments = ["http", ...auth.flags, method, shellQuote(url)]
+  const rest = [...queryArgs, ...headerArgs, ...bodyArgs]
+  const head = headSegments.join(" ")
+  if (rest.length === 0) return head
+  return [head, ...rest.map((p) => `  ${p}`)].join(" \\\n")
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@voleeo/curl",
+  "displayName": "Copy as cURL",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./format": "./src/format.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*",
+    "@voleeo/types": "workspace:*"
+  }
+}

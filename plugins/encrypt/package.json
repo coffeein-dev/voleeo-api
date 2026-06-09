@@ -1,0 +1,13 @@
+{
+  "name": "@voleeo/encrypt",
+  "displayName": "Workspace Encryption",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*"
+  }
+}

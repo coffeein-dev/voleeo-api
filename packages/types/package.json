@@ -1,0 +1,12 @@
+{
+  "name": "@voleeo/types",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./bindings": "./bindings.ts"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1"
+  }
+}

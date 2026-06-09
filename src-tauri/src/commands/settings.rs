@@ -1,0 +1,70 @@
+use tauri::State;
+use voleeo_core::VoleeoError;
+
+use crate::state::AppState;
+
+#[derive(serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct McpSettings {
+    pub enabled: bool,
+    pub token: Option<String>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn settings_get_mcp(state: State<'_, AppState>) -> Result<McpSettings, VoleeoError> {
+    let enabled = *state.mcp_enabled.read().await;
+    let token = state.mcp_token.read().await.clone();
+    Ok(McpSettings { enabled, token })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn settings_set_mcp_enabled(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<McpSettings, VoleeoError> {
+    *state.mcp_enabled.write().await = enabled;
+
+    // Generate token on first enable if none exists.
+    if enabled {
+        let has_token = state.mcp_token.read().await.is_some();
+        if !has_token {
+            let token = generate_token();
+            state
+                .secrets
+                .write()
+                .await
+                .set("mcp_token".into(), token.clone())
+                .map_err(|e| VoleeoError::Storage(e.to_string()))?;
+            *state.mcp_token.write().await = Some(token);
+        }
+    }
+
+    state.save_settings().await;
+    settings_get_mcp(state).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn settings_regenerate_mcp_token(
+    state: State<'_, AppState>,
+) -> Result<String, VoleeoError> {
+    let token = generate_token();
+    state
+        .secrets
+        .write()
+        .await
+        .set("mcp_token".into(), token.clone())
+        .map_err(|e| VoleeoError::Storage(e.to_string()))?;
+    *state.mcp_token.write().await = Some(token.clone());
+    Ok(token)
+}
+
+fn generate_token() -> String {
+    use rand::RngExt;
+    let mut rng = rand::rng();
+    (0..32)
+        .map(|_| format!("{:02x}", rng.random::<u8>()))
+        .collect()
+}

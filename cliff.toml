@@ -1,0 +1,30 @@
+# git-cliff config — computes the next semver (--bumped-version) and renders
+# GitHub release notes. No CHANGELOG.md is kept; GitHub Releases are the changelog.
+
+[bump]
+initial_tag = "v0.1.0"
+features_always_bump_minor = true
+breaking_always_bump_major = false # while 0.x, breaking changes bump minor
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+tag_pattern = "v[0-9].*"
+sort_commits = "newest"
+# <!-- N --> prefixes order the groups; the template strips them
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^.*", skip = true }, # chore, ci, docs, refactor, style, test
+]
+
+[changelog]
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+## {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.breaking %}**BREAKING:** {% endif %}{{ commit.message | upper_first }}
+{%- endfor %}
+{% endfor %}
+"""

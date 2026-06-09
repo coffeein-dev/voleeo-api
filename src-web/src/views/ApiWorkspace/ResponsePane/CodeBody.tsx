@@ -1,0 +1,186 @@
+import { json as jsonLang } from "@codemirror/lang-json"
+import { xml as xmlLang } from "@codemirror/lang-xml"
+import { search } from "@codemirror/search"
+import CodeMirror, {
+  defaultLightThemeOption,
+  type EditorView,
+  keymap,
+  oneDark,
+} from "@uiw/react-codemirror"
+import { useMemo, useRef, useState } from "react"
+import { Glyph } from "@/components/Glyph"
+import { useThemeStore } from "@/store/theme"
+import { cmEditorTheme } from "../cmEditorTheme"
+import { foldingExtension } from "../cmFolding"
+import type { BodyLang } from "./bodyLang"
+import { FindBar } from "./FindBar"
+import { useBodyFilter } from "./useBodyFilter"
+import { useCmFind } from "./useCmFind"
+
+export function CodeBody({
+  rawText,
+  lang,
+}: {
+  rawText: string
+  lang: BodyLang
+}) {
+  const activeTheme = useThemeStore((s) => s.activeTheme)
+  const isDark = activeTheme?.kind !== "light"
+
+  const {
+    filterOpen,
+    filterQuery,
+    setFilterQuery,
+    filterInputRef,
+    filterResult,
+    openFilter,
+    closeFilter,
+  } = useBodyFilter({ rawText, lang })
+
+  const cmViewRef = useRef<EditorView | null>(null)
+  const find = useCmFind(cmViewRef)
+  const [findOpen, setFindOpen] = useState(false)
+  const openFindRef = useRef<() => void>(() => {})
+  openFindRef.current = () => setFindOpen(true)
+
+  function closeFind() {
+    find.clear()
+    setFindOpen(false)
+  }
+
+  const langExt = useMemo(() => {
+    if (lang === "json") return jsonLang()
+    if (lang === "xml") return xmlLang()
+    return []
+  }, [lang])
+
+  const extensions = useMemo(
+    () => [
+      isDark ? oneDark : defaultLightThemeOption,
+      cmEditorTheme,
+      ...(Array.isArray(langExt) ? langExt : [langExt]),
+      search(),
+      keymap.of([
+        {
+          key: "Mod-f",
+          preventDefault: true,
+          run: () => {
+            openFindRef.current()
+            return true
+          },
+        },
+      ]),
+      ...(lang === "json" || lang === "xml" ? [foldingExtension()] : []),
+    ],
+    [isDark, langExt, lang],
+  )
+
+  const canFilter = lang === "json" || lang === "xml"
+  const placeholder =
+    lang === "json"
+      ? "$.field  ·  $.items[*].name  ·  $..author"
+      : "//tag  ·  /root/items  ·  //item[@id='1']"
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      {filterOpen && (
+        <div
+          className={`shrink-0 flex items-center gap-2 px-3 py-1.5 border-b bg-surface ${filterResult.error ? "border-error/60" : "border-border"}`}
+        >
+          <Glyph
+            kind="filter"
+            size={12}
+            color={filterResult.error ? "var(--base08)" : "var(--base04)"}
+          />
+          <input
+            ref={filterInputRef}
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && closeFilter()}
+            placeholder={placeholder}
+            autoComplete="off"
+            spellCheck={false}
+            className="flex-1 bg-transparent border-none outline-none font-mono text-[0.786rem] text-fg placeholder:text-muted"
+          />
+          {filterQuery.trim() && (
+            <span
+              className={`font-mono text-[0.714rem] shrink-0 ${filterResult.error ? "text-error" : "text-muted"}`}
+            >
+              {filterResult.error
+                ? filterResult.error
+                : filterResult.matchCount === 0
+                  ? "no matches"
+                  : filterResult.matchCount !== null
+                    ? `${filterResult.matchCount} match${filterResult.matchCount !== 1 ? "es" : ""}`
+                    : null}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={closeFilter}
+            className="flex items-center justify-center w-4 h-4 rounded-[2px] border-0 bg-transparent outline-none cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <Glyph kind="x" size={10} color="var(--base04)" />
+          </button>
+        </div>
+      )}
+
+      {findOpen && (
+        <FindBar
+          query={find.query}
+          onChange={find.setQuery}
+          onNext={find.next}
+          onPrev={find.prev}
+          onClose={closeFind}
+          status={find.status}
+        />
+      )}
+
+      <div className="flex-1 min-h-0 relative overflow-hidden">
+        {!filterOpen && !findOpen && (
+          <div className="absolute top-1.5 right-4 z-10 flex items-center gap-1">
+            {canFilter && (
+              <button
+                type="button"
+                title={
+                  lang === "json" ? "Filter by JSONPath" : "Filter by XPath"
+                }
+                onClick={openFilter}
+                className="p-1 rounded-[3px] border border-border text-muted hover:text-fg hover:border-fg/30 bg-transparent cursor-pointer transition-colors"
+              >
+                <Glyph kind="filter" size={13} color="currentColor" />
+              </button>
+            )}
+            <button
+              type="button"
+              title="Find in response"
+              onClick={() => setFindOpen(true)}
+              className="p-1 rounded-[3px] border border-border text-muted hover:text-fg hover:border-fg/30 bg-transparent cursor-pointer transition-colors"
+            >
+              <Glyph kind="search" size={13} color="currentColor" />
+            </button>
+          </div>
+        )}
+        <CodeMirror
+          value={filterResult.displayText}
+          readOnly
+          theme="none"
+          extensions={extensions}
+          onCreateEditor={(view) => {
+            cmViewRef.current = view
+          }}
+          height="100%"
+          style={{ height: "100%" }}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: false,
+            highlightActiveLine: true,
+            highlightSelectionMatches: true,
+            autocompletion: false,
+            searchKeymap: false,
+          }}
+        />
+      </div>
+    </div>
+  )
+}

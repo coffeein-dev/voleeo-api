@@ -1,0 +1,379 @@
+pub mod commands;
+mod mcp_server;
+mod secret_store;
+mod state;
+
+use state::AppState;
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    Emitter, Manager,
+};
+
+pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
+        commands::workspace::list_workspaces,
+        commands::workspace::create_workspace,
+        commands::workspace::workspace_get_key_display,
+        commands::workspace::workspace_enable_encryption,
+        commands::workspace::workspace_import_key,
+        commands::workspace::workspace_get_settings,
+        commands::workspace::workspace_list_settings,
+        commands::workspace::workspace_save_settings,
+        commands::workspace::delete_workspace,
+        commands::workspace::rename_workspace,
+        commands::workspace::workspace_get_path,
+        commands::workspace::workspace_set_sync_dir,
+        commands::workspace::workspace_open_folder,
+        commands::workspace::workspace_has_key,
+        commands::workspace::workspace_encrypt_value,
+        commands::workspace::workspace_decrypt_value,
+        commands::workspace::update_workspace_headers,
+        commands::workspace::update_workspace_auth,
+        commands::workspace::update_workspace_dns_overrides,
+        commands::request::list_requests,
+        commands::request::list_folders,
+        commands::request::create_request,
+        commands::request::create_folder,
+        commands::request::duplicate_request,
+        commands::request::duplicate_folder,
+        commands::request::rename_request,
+        commands::request::update_request,
+        commands::request::rename_folder,
+        commands::request::update_folder,
+        commands::request::update_folder_color,
+        commands::request::update_folder_variables,
+        commands::request::delete_request,
+        commands::request::delete_folder,
+        commands::request::move_items,
+        commands::http::send_request,
+        commands::http::cancel_request,
+        commands::websocket::list_ws_connections,
+        commands::websocket::get_ws_connection,
+        commands::websocket::create_ws_connection,
+        commands::websocket::duplicate_ws_connection,
+        commands::websocket::rename_ws_connection,
+        commands::websocket::update_ws_connection,
+        commands::websocket::delete_ws_connection,
+        commands::websocket::ws_update_position,
+        commands::websocket::ws_connect,
+        commands::websocket::ws_send_message,
+        commands::websocket::ws_disconnect,
+        commands::websocket::ws_is_connected,
+        commands::websocket::ws_get_transcript,
+        commands::websocket::ws_list_sessions,
+        commands::websocket::ws_get_session,
+        commands::websocket::ws_clear_transcript,
+        commands::response::response_list,
+        commands::response::response_get,
+        commands::response::response_clear,
+        commands::response::response_body_window,
+        commands::response::response_body_search,
+        commands::response::response_body_filter,
+        commands::settings::settings_get_mcp,
+        commands::settings::settings_set_mcp_enabled,
+        commands::settings::settings_regenerate_mcp_token,
+        commands::theme::theme_get_active,
+        commands::theme::theme_activate,
+        commands::theme::theme_get_color_mode,
+        commands::theme::theme_set_color_mode,
+        commands::info::get_app_info,
+        commands::plugin_store::plugin_store_get,
+        commands::plugin_store::plugin_store_set,
+        commands::plugin_store::plugin_store_delete,
+        commands::environment::env_list,
+        commands::environment::env_get,
+        commands::environment::env_create,
+        commands::environment::env_update,
+        commands::environment::env_delete,
+        commands::cookie::cookies_list_jars,
+        commands::cookie::cookies_create_jar,
+        commands::cookie::cookies_rename_jar,
+        commands::cookie::cookies_delete_jar,
+        commands::cookie::cookies_set_active_jar,
+        commands::cookie::cookies_get_active_jar,
+        commands::cookie::cookies_save_cookie,
+        commands::cookie::cookies_delete_cookie,
+        commands::cookie::cookies_clear_jar,
+        commands::cookie::cookies_clear_expired,
+        commands::system_fonts::list_system_fonts,
+        commands::git::git_repo_info,
+        commands::git::git_init,
+        commands::git::git_status,
+        commands::git::git_changes,
+        commands::git::git_stage,
+        commands::git::git_stage_all,
+        commands::git::git_unstage,
+        commands::git::git_unstage_all,
+        commands::git::git_discard,
+        commands::git::git_commit,
+        commands::git::git_remotes,
+        commands::git::git_set_remote,
+        commands::git::git_set_upstream,
+        commands::git::git_fetch,
+        commands::git::git_pull,
+        commands::git::git_push,
+        commands::git::git_branches,
+        commands::git::git_checkout,
+        commands::git::git_create_branch,
+        commands::git::git_rename_branch,
+        commands::git::git_clone_workspace,
+        commands::git::git_set_credentials,
+        commands::git::git_clear_credentials,
+        commands::git::git_credentials_user,
+        commands::git::git_set_identity,
+        commands::git::git_get_identity,
+        commands::git::git_entity_conflicts,
+        commands::git::git_resolve_entity,
+        commands::git::git_resolve_delete,
+        commands::git::git_finish_merge,
+        commands::git::git_log,
+        commands::git::git_log_for_path,
+        commands::git::git_commit_changes,
+        commands::git::git_revert_commit,
+    ])
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(voleeo_mac_window::init())
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let settings_item = MenuItemBuilder::with_id("settings", "Settings")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
+            let close_workspace_item =
+                MenuItemBuilder::with_id("close_workspace", "Close Workspace").build(app)?;
+
+            let app_menu = SubmenuBuilder::new(app, "Voleeo")
+                .item(&PredefinedMenuItem::about(app, None, None)?)
+                .separator()
+                .item(&settings_item)
+                .item(&close_workspace_item)
+                .separator()
+                .item(&PredefinedMenuItem::services(app, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::hide(app, None)?)
+                .item(&PredefinedMenuItem::hide_others(app, None)?)
+                .item(&PredefinedMenuItem::show_all(app, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::quit(app, None)?)
+                .build()?;
+
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .item(&PredefinedMenuItem::undo(app, None)?)
+                .item(&PredefinedMenuItem::redo(app, None)?)
+                .separator()
+                .item(&PredefinedMenuItem::cut(app, None)?)
+                .item(&PredefinedMenuItem::copy(app, None)?)
+                .item(&PredefinedMenuItem::paste(app, None)?)
+                .item(&PredefinedMenuItem::select_all(app, None)?)
+                .build()?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&app_menu)
+                .item(&edit_menu)
+                .build()?;
+            app.set_menu(menu)?;
+
+            let app_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            std::fs::create_dir_all(&app_dir)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let settings_path = app_dir.join("settings.json");
+
+            let state = tauri::async_runtime::block_on(async {
+                AppState::new(settings_path, &app_dir)
+                    .await
+                    .expect("failed to init state")
+            });
+
+            // Spawn the MCP socket server in the background.
+            let socket_path = mcp_server::socket_path(&app_dir);
+            mcp_server::spawn(&app.handle().clone(), &state, socket_path);
+
+            app.manage(state);
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "close_workspace" {
+                if let Some(win) = app.get_webview_window("main") {
+                    win.emit("workspace:close", ()).ok();
+                }
+            } else if event.id() == "settings" {
+                if let Some(win) = app.get_webview_window("settings") {
+                    win.show().ok();
+                    win.set_focus().ok();
+                } else {
+                    tauri::WebviewWindowBuilder::new(
+                        app,
+                        "settings",
+                        tauri::WebviewUrl::App("index.html".into()),
+                    )
+                    .title("Settings")
+                    .inner_size(900.0, 600.0)
+                    .min_inner_size(600.0, 400.0)
+                    .resizable(true)
+                    .build()
+                    .ok();
+                }
+            }
+        })
+        .on_window_event(|window, event| {
+            // Closing the main window closes the whole app — secondary windows
+            // (settings, Git Sync, …) shouldn't linger without their parent.
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. })
+                && window.label() == "main"
+            {
+                window.app_handle().exit(0);
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::workspace::list_workspaces,
+            commands::workspace::create_workspace,
+            commands::workspace::workspace_get_key_display,
+            commands::workspace::workspace_enable_encryption,
+            commands::workspace::workspace_import_key,
+            commands::workspace::workspace_get_settings,
+            commands::workspace::workspace_list_settings,
+            commands::workspace::workspace_save_settings,
+            commands::workspace::delete_workspace,
+            commands::workspace::rename_workspace,
+            commands::workspace::workspace_get_path,
+            commands::workspace::workspace_set_sync_dir,
+            commands::workspace::workspace_open_folder,
+            commands::workspace::workspace_has_key,
+            commands::workspace::workspace_encrypt_value,
+            commands::workspace::workspace_decrypt_value,
+            commands::workspace::update_workspace_headers,
+            commands::workspace::update_workspace_auth,
+            commands::workspace::update_workspace_dns_overrides,
+            commands::request::list_requests,
+            commands::request::list_folders,
+            commands::request::create_request,
+            commands::request::create_folder,
+            commands::request::duplicate_request,
+            commands::request::duplicate_folder,
+            commands::request::rename_request,
+            commands::request::update_request,
+            commands::request::rename_folder,
+            commands::request::update_folder,
+            commands::request::update_folder_color,
+            commands::request::update_folder_variables,
+            commands::request::delete_request,
+            commands::request::delete_folder,
+            commands::request::move_items,
+            commands::http::send_request,
+            commands::http::cancel_request,
+            commands::websocket::list_ws_connections,
+            commands::websocket::get_ws_connection,
+            commands::websocket::create_ws_connection,
+            commands::websocket::duplicate_ws_connection,
+            commands::websocket::rename_ws_connection,
+            commands::websocket::update_ws_connection,
+            commands::websocket::delete_ws_connection,
+            commands::websocket::ws_update_position,
+            commands::websocket::ws_connect,
+            commands::websocket::ws_send_message,
+            commands::websocket::ws_disconnect,
+            commands::websocket::ws_is_connected,
+            commands::websocket::ws_get_transcript,
+            commands::websocket::ws_list_sessions,
+            commands::websocket::ws_get_session,
+            commands::websocket::ws_clear_transcript,
+            commands::response::response_list,
+            commands::response::response_get,
+            commands::response::response_clear,
+            commands::response::response_body_window,
+            commands::response::response_body_search,
+            commands::response::response_body_filter,
+            commands::settings::settings_get_mcp,
+            commands::settings::settings_set_mcp_enabled,
+            commands::settings::settings_regenerate_mcp_token,
+            commands::theme::theme_get_active,
+            commands::theme::theme_activate,
+            commands::theme::theme_get_color_mode,
+            commands::theme::theme_set_color_mode,
+            commands::info::get_app_info,
+            commands::plugin_store::plugin_store_get,
+            commands::plugin_store::plugin_store_set,
+            commands::plugin_store::plugin_store_delete,
+            commands::environment::env_list,
+            commands::environment::env_get,
+            commands::environment::env_create,
+            commands::environment::env_update,
+            commands::environment::env_delete,
+            commands::cookie::cookies_list_jars,
+            commands::cookie::cookies_create_jar,
+            commands::cookie::cookies_rename_jar,
+            commands::cookie::cookies_delete_jar,
+            commands::cookie::cookies_set_active_jar,
+            commands::cookie::cookies_get_active_jar,
+            commands::cookie::cookies_save_cookie,
+            commands::cookie::cookies_delete_cookie,
+            commands::cookie::cookies_clear_jar,
+            commands::cookie::cookies_clear_expired,
+            commands::system_fonts::list_system_fonts,
+            commands::git::git_repo_info,
+            commands::git::git_init,
+            commands::git::git_status,
+            commands::git::git_changes,
+            commands::git::git_stage,
+            commands::git::git_stage_all,
+            commands::git::git_unstage,
+            commands::git::git_unstage_all,
+            commands::git::git_discard,
+            commands::git::git_commit,
+            commands::git::git_remotes,
+            commands::git::git_set_remote,
+            commands::git::git_set_upstream,
+            commands::git::git_fetch,
+            commands::git::git_pull,
+            commands::git::git_push,
+            commands::git::git_branches,
+            commands::git::git_checkout,
+            commands::git::git_create_branch,
+            commands::git::git_rename_branch,
+            commands::git::git_clone_workspace,
+            commands::git::git_set_credentials,
+            commands::git::git_clear_credentials,
+            commands::git::git_credentials_user,
+            commands::git::git_set_identity,
+            commands::git::git_get_identity,
+            commands::git::git_entity_conflicts,
+            commands::git::git_resolve_entity,
+            commands::git::git_resolve_delete,
+            commands::git::git_finish_merge,
+            commands::git::git_log,
+            commands::git::git_log_for_path,
+            commands::git::git_commit_changes,
+            commands::git::git_revert_commit,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error building tauri app")
+        .run(|app_handle, event| {
+            // RunEvent::Reopen (dock-icon click) is macOS-only.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                use tauri::Manager;
+                if let Some(main) = app_handle.get_webview_window("main") {
+                    let _ = main.unminimize();
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+                for (label, window) in app_handle.webview_windows() {
+                    if label == "main" {
+                        continue;
+                    }
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = (&app_handle, &event);
+        });
+}

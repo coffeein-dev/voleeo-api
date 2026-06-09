@@ -1,0 +1,19 @@
+{
+  "name": "voleeo",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "workspaces": ["src-web", "packages/*", "plugins/*"],
+  "scripts": {
+    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "build": "tauri build",
+    "codegen": "cd src-tauri && TAURI_CONFIG='{\"bundle\":{\"externalBin\":[]}}' cargo run --bin codegen",
+    "mcp-bridge:build": "cargo build --bin voleeo-mcp-bridge",
+    "typecheck": "cd src-web && bun run typecheck"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^25.6.0",
+    "shadcn": "^4.3.1"
+  }
+}

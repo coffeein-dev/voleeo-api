@@ -1,0 +1,13 @@
+{
+  "name": "@voleeo/ask",
+  "displayName": "Ask value",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@voleeo/plugin-api": "workspace:*"
+  }
+}
