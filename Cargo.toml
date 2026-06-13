@@ -46,4 +46,4 @@ tauri = { version = "2", features = [] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta-typescript = "0.0.12"
 tauri-plugin-dialog = "2"
-git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2", "vendored-openssl", "ssh", "https"] }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "vendored-openssl", "ssh", "https"] }
